@@ -393,16 +393,14 @@ class RewardModelTrainer(ABC):
             chosen_only_ids, c_only_mask, reject_only_ids, r_only_mask
         )
         
-        # 前向传播
-        with_prompt_reward, with_prompt_reward_only, with_prompt_output = model(
-            with_prompt_input_ids, 
-            attention_mask=with_prompt_att_masks, 
-            return_output=True
-        )
+        # 将两种输入拼接在一起
+        all_input_ids = torch.cat([with_prompt_input_ids, only_input_ids], dim=0)
+        all_att_masks = torch.cat([with_prompt_att_masks, only_att_masks], dim=0)
         
-        only_reward, only_reward_only, only_output = model(
-            only_input_ids, 
-            attention_mask=only_att_masks, 
+        # 单次前向传播
+        all_rewards, all_rewards_only, output = model(
+            all_input_ids, 
+            attention_mask=all_att_masks, 
             return_output=True
         )
         
@@ -410,15 +408,15 @@ class RewardModelTrainer(ABC):
         batch_size = chosen_with_prompt_ids.shape[0]
         
         # 带prompt的奖励分数
-        chosen_with_prompt_rewards = with_prompt_reward[:batch_size]
-        rejected_with_prompt_rewards = with_prompt_reward[batch_size:]
+        chosen_with_prompt_rewards = all_rewards[:batch_size]
+        rejected_with_prompt_rewards = all_rewards[batch_size:2*batch_size]
         
         # 不带prompt的奖励分数
-        chosen_only_rewards = only_reward[:batch_size]
-        rejected_only_rewards = only_reward[batch_size:]
+        chosen_only_rewards = all_rewards[2*batch_size:3*batch_size]
+        rejected_only_rewards = all_rewards[3*batch_size:]
         
         # 获取辅助损失
-        aux_loss = with_prompt_output.aux_loss if "aux_loss" in with_prompt_output else 0
+        aux_loss = output.aux_loss if "aux_loss" in output else 0
         
         return (
             chosen_with_prompt_rewards, 
